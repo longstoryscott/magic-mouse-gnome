@@ -348,16 +348,16 @@ def send_key(gesture: str) -> bool:
     """Send a key combination for a detected gesture using the active backend.
 
     Gestures:
-        swipe_left  -> Ctrl+Home+Right  (workspace forward)
-        swipe_right -> Ctrl+Home+Left   (workspace back)
+        swipe_left  -> Ctrl+Super+Right  (workspace forward)
+        swipe_right -> Ctrl+Super+Left   (workspace back)
     """
     if gesture == "swipe_left":
-        ydotool_keys = [keycode("KEY_LEFTCTRL"), keycode("KEY_HOME"), keycode("KEY_RIGHT")]
-        wtype_mods = ["ctrl", "home"]
+        ydotool_keys = [keycode("KEY_LEFTCTRL"), keycode("KEY_LEFTMETA"), keycode("KEY_RIGHT")]
+        wtype_mods = ["ctrl", "meta"]
         wtype_key = "Right"
     elif gesture == "swipe_right":
-        ydotool_keys = [keycode("KEY_LEFTCTRL"), keycode("KEY_HOME"), keycode("KEY_LEFT")]
-        wtype_mods = ["ctrl", "home"]
+        ydotool_keys = [keycode("KEY_LEFTCTRL"), keycode("KEY_LEFTMETA"), keycode("KEY_LEFT")]
+        wtype_mods = ["ctrl", "meta"]
         wtype_key = "Left"
     else:
         if DEBUG:

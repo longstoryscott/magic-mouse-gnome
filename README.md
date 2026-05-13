@@ -31,8 +31,8 @@ This project solves that by using **ydotool** (via the Linux uinput framework) a
 
 | Gesture | Action |
 |---------|--------|
-| Swipe → (right) | Workspace back (Ctrl+Home+Left) |
-| Swipe ← (left) | Workspace forward (Ctrl+Home+Right) |
+| Swipe → (right) | Workspace back (Ctrl+Super+Left) |
+| Swipe ← (left) | Workspace forward (Ctrl+Super+Right) |
 
 ### Key Simulation Backends
 
