@@ -58,10 +58,20 @@ fi
 
 if [[ "$HAS_YDOTOOL" == true ]]; then
     echo -e "${GREEN}  ydotool found (recommended backend)${NC}"
-    # Check ydotoold daemon
-    if ! systemctl --user is-active --quiet ydotoold 2>/dev/null; then
-        echo -e "${YELLOW}  Warning: ydotoold daemon is not running${NC}"
-        echo -e "${YELLOW}  Start with: systemctl --user enable --now ydotoold${NC}"
+    # Check ydotool daemon (service name varies: 'ydotool' or 'ydotoold')
+    YDOTOOL_DAEMON=false
+    for svc in ydotool ydotoold; do
+        if systemctl --user is-active --quiet "$svc" 2>/dev/null; then
+            YDOTOOL_DAEMON=true
+            break
+        fi
+    done
+    if [[ "$YDOTOOL_DAEMON" == false ]]; then
+        echo -e "${YELLOW}  Starting ydotool daemon...${NC}"
+        systemctl --user enable --now ydotool 2>/dev/null || \
+        systemctl --user enable --now ydotoold 2>/dev/null || \
+        echo -e "${YELLOW}  Could not start daemon. Start manually:${NC}"
+        echo -e "${YELLOW}  systemctl --user enable --now ydotool${NC}"
     fi
 else
     echo -e "${GREEN}  wtype found (fallback backend)${NC}"

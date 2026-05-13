@@ -10,6 +10,7 @@ Supports both wtype and ydotool backends for key simulation.
 """
 
 import os
+import re
 import sys
 import glob
 import subprocess
@@ -66,11 +67,35 @@ MAX_FINGERS = get_env_int('MAX_FINGERS', 2)                  # Max fingers (igno
 DEBUG = os.environ.get('DEBUG', '').lower() in ('1', 'true', 'yes')
 
 
-# Linux input event keycodes (from linux/input-event-codes.h)
-KEY_LEFTALT = 56
-KEY_RIGHTALT = 100
-KEY_LEFT = 105
-KEY_RIGHT = 106
+# Linux input event keycodes — parsed from input-event-codes.h at startup
+# so no manual re-definition is needed.
+_KEYCODES: dict[str, int] = {}
+
+def _parse_keycodes() -> dict[str, int]:
+    """Parse the kernel header for all KEY_* definitions (name -> int)."""
+    header = "/usr/include/linux/input-event-codes.h"
+    if not os.path.exists(header):
+        if DEBUG:
+            print(f"Warning: {header} not found, keycodes unavailable", file=sys.stderr)
+        return {}
+    codes: dict[str, int] = {}
+    with open(header) as f:
+        for line in f:
+            m = re.match(r"#define\s+(KEY_\w+)\s+(\d+)", line)
+            if m:
+                codes[m.group(1)] = int(m.group(2))
+    return codes
+
+
+_KEYCODES = _parse_keycodes()
+
+
+def keycode(name: str) -> int:
+    """Look up a Linux keycode by name (e.g. 'KEY_LEFTCTRL' -> 29)."""
+    val = _KEYCODES.get(name)
+    if val is None:
+        raise KeyError(f"Unknown keycode: {name} (available: {len(_KEYCODES)} codes)")
+    return val
 
 
 class Backend(Enum):
@@ -234,8 +259,12 @@ def detect_backend() -> Backend:
     return Backend.NONE
 
 
-def _send_key_wtype(modifier: str, key: str) -> bool:
-    """Send a key combination via wtype (Wayland)."""
+def _send_key_wtype(modifiers: list[str], key: str) -> bool:
+    """Send a key combination via wtype (Wayland).
+
+    modifiers is an ordered list of modifier names to press, then release in reverse.
+    key is the final key to press/release between the modifiers.
+    """
     try:
         env = os.environ.copy()
         user = os.environ.get('SUDO_USER', os.environ.get('USER'))
@@ -247,10 +276,16 @@ def _send_key_wtype(modifier: str, key: str) -> bool:
             env['XDG_RUNTIME_DIR'] = f'/run/user/{uid}'
         env['WAYLAND_DISPLAY'] = os.environ.get('WAYLAND_DISPLAY', 'wayland-1')
 
-        subprocess.run(
-            ['wtype', '-M', modifier, '-k', key, '-m', modifier],
-            check=True, capture_output=True, env=env
-        )
+        args = ['wtype']
+        # Press all modifiers
+        for mod in modifiers:
+            args.extend(['-m', mod])
+        # Press and release the key
+        args.extend(['-p', key])
+        # Release all modifiers in reverse
+        for mod in reversed(modifiers):
+            args.extend(['-u', mod])
+        subprocess.run(args, check=True, capture_output=True, env=env)
         return True
     except Exception as e:
         if DEBUG:
@@ -258,16 +293,21 @@ def _send_key_wtype(modifier: str, key: str) -> bool:
         return False
 
 
-def _send_key_ydotool(modifier_code: int, key_code: int) -> bool:
-    """Send a key combination via ydotool (uinput)."""
+def _send_key_ydotool(key_codes: list[int]) -> bool:
+    """Send a key combination via ydotool (uinput).
+
+    key_codes is an ordered list of keycodes to press, then release in reverse.
+    e.g. [29, 102, 105] → press Ctrl, press Home, press Left, release Left, release Home, release Ctrl
+    """
     try:
-        # ydotool key format: KEYCODE:ACTION (1=press, 0=release)
-        # Press modifier, press key, release key, release modifier
-        keys = f"{modifier_code}:1 {key_code}:1 {key_code}:0 {modifier_code}:0"
-        subprocess.run(
-            ['ydotool', 'key'] + keys.split(),
-            check=True, capture_output=True
-        )
+        args = ['ydotool', 'key']
+        # Press all keys in order
+        for kc in key_codes:
+            args.append(f"{kc}:1")
+        # Release all keys in reverse order
+        for kc in reversed(key_codes):
+            args.append(f"{kc}:0")
+        subprocess.run(args, check=True, capture_output=True)
         return True
     except Exception as e:
         if DEBUG:
@@ -304,25 +344,30 @@ def init_backend() -> Backend:
     return _key_backend
 
 
-def send_key(modifier: str, key: str) -> bool:
-    """Send a key combination using the detected backend."""
+def send_key(gesture: str) -> bool:
+    """Send a key combination for a detected gesture using the active backend.
+
+    Gestures:
+        swipe_left  -> Ctrl+Home+Right  (workspace forward)
+        swipe_right -> Ctrl+Home+Left   (workspace back)
+    """
+    if gesture == "swipe_left":
+        ydotool_keys = [keycode("KEY_LEFTCTRL"), keycode("KEY_HOME"), keycode("KEY_RIGHT")]
+        wtype_mods = ["ctrl", "home"]
+        wtype_key = "Right"
+    elif gesture == "swipe_right":
+        ydotool_keys = [keycode("KEY_LEFTCTRL"), keycode("KEY_HOME"), keycode("KEY_LEFT")]
+        wtype_mods = ["ctrl", "home"]
+        wtype_key = "Left"
+    else:
+        if DEBUG:
+            print(f"Unknown gesture: {gesture}", file=sys.stderr)
+        return False
+
     if _key_backend == Backend.WTYPE:
-        return _send_key_wtype(modifier, key)
+        return _send_key_wtype(wtype_mods, wtype_key)
     elif _key_backend == Backend.YDOTOOL:
-        # Map named keys to keycodes
-        mod_code = KEY_LEFTALT if modifier.lower() in ('alt', 'alt_l', 'leftalt') else KEY_RIGHTALT
-        key_map = {
-            'left': KEY_LEFT,
-            'right': KEY_RIGHT,
-            'up': 103,
-            'down': 108,
-        }
-        key_upper = key.upper()
-        if key_upper not in key_map:
-            if DEBUG:
-                print(f"ydotool: unknown key '{key}'", file=sys.stderr)
-            return False
-        return _send_key_ydotool(mod_code, key_map[key_upper])
+        return _send_key_ydotool(ydotool_keys)
     else:
         if DEBUG:
             print("No key backend available", file=sys.stderr)
@@ -502,11 +547,11 @@ def run_device_loop(fd: int, state: GestureState) -> bool:
         gesture = detect_gesture(touches, state)
 
         if gesture == "swipe_left":
-            if send_key('alt', 'Right'):
-                print("→ Forward")
+            if send_key(gesture):
+                print("→ Workspace forward")
         elif gesture == "swipe_right":
-            if send_key('alt', 'Left'):
-                print("← Back")
+            if send_key(gesture):
+                print("← Workspace back")
 
 
 def main():
@@ -555,7 +600,7 @@ def main():
         state.last_scroll_time = 0
 
         print(f"Connected: {hidraw}")
-        print("Swipe horizontally for browser back/forward")
+        print("Swipe horizontally for workspace back/forward")
         print("Press Ctrl+C to stop\n")
 
         try:
