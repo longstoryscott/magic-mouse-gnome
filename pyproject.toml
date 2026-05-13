@@ -1,0 +1,35 @@
+[tool.setuptools]
+py-modules = ["magic_mouse_gestures"]
+
+[project]
+name = "magic-mouse-gnome"
+version = "1.3.0"
+description = "macOS-style swipe gestures for Apple Magic Mouse 2 on GNOME/KDE Wayland"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Scott Long"},
+]
+keywords = ["magic-mouse", "gestures", "linux", "wayland", "gnome", "kde", "plasma"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/longstoryscott/magic-mouse-gnome"
+Repository = "https://github.com/longstoryscott/magic-mouse-gnome"
+Issues = "https://github.com/longstoryscott/magic-mouse-gnome/issues"
+
+[project.scripts]
+magic-mouse-gnome = "magic_mouse_gestures:main"
